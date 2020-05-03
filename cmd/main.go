@@ -8,13 +8,14 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/sync/errgroup"
 )
 
 type application struct {
 	Server *server.Server
 }
 
-func NewApplication(Server *server.Server) application {
+func newApplication(Server *server.Server) application {
 	return application{Server: Server}
 }
 
@@ -33,6 +34,26 @@ func main() {
 
 	if logrus.IsLevelEnabled(logrus.TraceLevel) {
 		fmt.Println(config.String())
+	}
+
+	app, err := InitializeApplication(config)
+	if err != nil {
+		logger := logrus.WithError(err)
+		logger.Fatalln("main: cannot initialize server")
+	}
+
+	g := errgroup.Group{}
+	g.Go(func() error {
+		logrus.WithFields(
+			logrus.Fields{
+				"Host": config.Server.Host,
+			},
+		).Info("starting the http server")
+		return app.Server.ListenAndServe()
+	})
+
+	if err := g.Wait(); err != nil {
+		logrus.WithError(err).Fatalln("program terminated")
 	}
 }
 
